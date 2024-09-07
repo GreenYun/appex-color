@@ -52,14 +52,14 @@ int timeout_thread(void *arg)
 	UNUSED(arg);
 
 	for (;;) {
-		thrd_sleep(&(struct timespec) { .tv_sec = 60 }, NULL);
+		thrd_sleep(&timespec_s(60), NULL);
 
 		int time = atomic_fetch_add(&time_idle, 1);
 
 		if (++time == timeout) {
 			for (int i = 0; i < timeout_callback_count; i++) {
 				timeout_callback[i]();
-				nanosleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 2500000 }, NULL);
+				nanosleep(&timespec_us(2500), NULL);
 			}
 		} else if (time > timeout)
 			atomic_store(&time_idle, timeout + 1);

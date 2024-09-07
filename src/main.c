@@ -5,12 +5,13 @@
 #include <time.h>
 
 #include "btn.h"
+#include "common.h"
 #include "conf.h"
 #include "graph.h"
 #include "point.h"
 #include "timer.h"
 
-int main()
+int main(void)
 {
 	conf_init();
 
@@ -23,7 +24,7 @@ int main()
 	point_init();
 
 	for (;;)
-		nanosleep(&(struct timespec) { .tv_sec = INT_MAX }, NULL);
+		nanosleep(&timespec_s(INT_MAX), NULL);
 
 	return 0;
 }

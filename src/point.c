@@ -10,12 +10,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <threads.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <modbus/modbus.h>
 
 #include "common.h"
 #include "conf.h"
+#include "gpio.h"
 #include "timer.h"
 
 // Magic!
@@ -35,7 +37,6 @@ int pt_chg_callback_count = 0;
 
 int  chip_thread(void *arg);
 void pos_init(void);
-char read_gpio(int gpio);
 void sync_as_master(void);
 void sync_as_slave(void);
 int  sync_thread(void *arg);
@@ -61,16 +62,34 @@ void point_get(pt_status_t *restrict p)
 
 void point_init(void)
 {
+	gpio_export(34);
+	gpio_export(35);
+	gpio_export(37);
+	gpio_export(38);
+
+	gpio_set_dir(34, "in");
+	gpio_set_dir(35, "in");
+	gpio_set_dir(37, "out");
+	gpio_set_dir(38, "in");
+
 	pos_init();
 
+	gpio_write(37, 0);
+	nanosleep(&timespec_ms(500), NULL);
+	gpio_write(37, 1);
+
+	gpio_write(38, 0);
+	nanosleep(&timespec_ms(500), NULL);
+	gpio_write(38, 1);
+
 	for (int i = 0; i < 5; i++) {
-		if (read_gpio(38) == 0)
+		if (gpio_read(38) == 0)
 			break;
 
-		nanosleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 500000000 }, NULL);
+		nanosleep(&timespec_ms(500), NULL);
 	}
 
-	if (read_gpio(38) != 0) {
+	if (gpio_read(38) != 0) {
 		perror("STM32 failed");
 		exit(1);
 	}
@@ -98,7 +117,7 @@ int chip_thread(void *arg)
 	modbus_flush(mb);
 
 	for (;;) {
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 500000000 }, NULL);
+		thrd_sleep(&timespec_ms(500), NULL);
 
 		uint16_t registers[6];
 		if (modbus_read_registers(mb, 0, 6, registers) < 0) {
@@ -142,44 +161,9 @@ int chip_thread(void *arg)
 
 void pos_init(void)
 {
-	char low  = read_gpio(34);
-	char high = read_gpio(35);
+	char low  = gpio_read(34);
+	char high = gpio_read(35);
 	pos       = (high << 1) | low;
-}
-
-char read_gpio(int gpio)
-{
-	char path[64];
-
-	snprintf(path, 64, "/sys/class/gpio/gpio%d/value", gpio);
-	int fd = open(path, O_RDONLY);
-
-	uint8_t val, last_press = 0xbb;
-	for (;;) {
-		lseek(fd, 0, SEEK_SET);
-		read(fd, &val, 1);
-
-		if (val == '1') {
-			last_press <<= 1;
-			last_press |= 1;
-		} else if (val == '0') {
-			last_press <<= 1;
-			last_press &= 0xfe;
-		} else {
-			close(fd);
-			return -1;
-		}
-
-		if (last_press == 0xff) {
-			close(fd);
-			return 1;
-		} else if (last_press == 0x00) {
-			close(fd);
-			return 0;
-		}
-
-		nanosleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 5000000 }, NULL);
-	}
 }
 
 void sync_as_master(void)
@@ -187,7 +171,7 @@ void sync_as_master(void)
 	bool update = false;
 
 	uint16_t read_buf[2];
-	for (int i = 1; i <= 3; i++, thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 150000000 }, NULL)) {
+	for (int i = 1; i <= 3; i++, thrd_sleep(&timespec_ms(150), NULL)) {
 		modbus_set_slave(sync_mb, i);
 		int ret = modbus_write_and_read_registers(sync_mb, 2, 8, points.points, 0, 2, read_buf);
 		if (ret <= 0)
@@ -209,7 +193,7 @@ void sync_as_master(void)
 		toggle_pt_update();
 	}
 
-	thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 200000000 }, NULL);
+	thrd_sleep(&timespec_ms(200), NULL);
 }
 
 void sync_as_slave(void)
@@ -254,7 +238,7 @@ void sync_as_slave(void)
 		toggle_pt_update();
 	}
 
-	thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 50000000 }, NULL);
+	thrd_sleep(&timespec_ms(50), NULL);
 }
 
 int sync_thread(void *arg)

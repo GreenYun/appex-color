@@ -1,0 +1,825 @@
+diff -druN a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	1970-01-01 00:00:00.000000000 +0000
++++ b/CMakeLists.txt	2024-09-07 22:15:25.637220592 +0000
+@@ -0,0 +1,34 @@
++cmake_minimum_required(VERSION 3.14)
++
++project(app LANGUAGES C VERSION 3.1.10)
++
++set(modbus_SOURCES
++    src/modbus-data.c
++    src/modbus-rtu.c
++    src/modbus-tcp.c
++    src/modbus.c
++)
++
++add_library(modbus STATIC ${modbus_SOURCES})
++
++target_include_directories(modbus
++    INTERFACE include
++    PRIVATE src
++)
++
++set_target_properties(modbus PROPERTIES
++    VERSION 6.0.1
++)
++
++target_compile_definitions(modbus PRIVATE
++    HAVE_CONFIG_H
++    SYSCONFDIR="/etc"
++    LIBEXECDIR="/libexec"
++)
++
++target_compile_options(modbus PRIVATE
++    -Wall -Wmissing-declarations -Wmissing-prototypes
++    -Wnested-externs -Wpointer-arith -Wpointer-arith
++    -Wsign-compare -Wchar-subscripts -Wstrict-prototypes
++    -Wshadow -Wformat-security
++)
+diff -druN a/include/modbus/modbus-rtu.h b/include/modbus/modbus-rtu.h
+--- a/include/modbus/modbus-rtu.h	1970-01-01 00:00:00.000000000 +0000
++++ b/include/modbus/modbus-rtu.h	2022-10-18 01:16:13.338819316 +0000
+@@ -0,0 +1,43 @@
++/*
++ * Copyright © Stéphane Raimbault <stephane.raimbault@gmail.com>
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#ifndef MODBUS_RTU_H
++#define MODBUS_RTU_H
++
++#include "modbus.h"
++
++MODBUS_BEGIN_DECLS
++
++/* Modbus_Application_Protocol_V1_1b.pdf Chapter 4 Section 1 Page 5
++ * RS232 / RS485 ADU = 253 bytes + slave (1 byte) + CRC (2 bytes) = 256 bytes
++ */
++#define MODBUS_RTU_MAX_ADU_LENGTH 256
++
++MODBUS_API modbus_t *
++modbus_new_rtu(const char *device, int baud, char parity, int data_bit, int stop_bit);
++
++#define MODBUS_RTU_RS232 0
++#define MODBUS_RTU_RS485 1
++
++MODBUS_API int modbus_rtu_set_serial_mode(modbus_t *ctx, int mode);
++MODBUS_API int modbus_rtu_get_serial_mode(modbus_t *ctx);
++
++#define MODBUS_RTU_RTS_NONE 0
++#define MODBUS_RTU_RTS_UP   1
++#define MODBUS_RTU_RTS_DOWN 2
++
++MODBUS_API int modbus_rtu_set_rts(modbus_t *ctx, int mode);
++MODBUS_API int modbus_rtu_get_rts(modbus_t *ctx);
++
++MODBUS_API int modbus_rtu_set_custom_rts(modbus_t *ctx,
++                                         void (*set_rts)(modbus_t *ctx, int on));
++
++MODBUS_API int modbus_rtu_set_rts_delay(modbus_t *ctx, int us);
++MODBUS_API int modbus_rtu_get_rts_delay(modbus_t *ctx);
++
++MODBUS_END_DECLS
++
++#endif /* MODBUS_RTU_H */
+diff -druN a/include/modbus/modbus-tcp.h b/include/modbus/modbus-tcp.h
+--- a/include/modbus/modbus-tcp.h	1970-01-01 00:00:00.000000000 +0000
++++ b/include/modbus/modbus-tcp.h	2022-10-18 00:57:15.718253234 +0000
+@@ -0,0 +1,52 @@
++/*
++ * Copyright © Stéphane Raimbault <stephane.raimbault@gmail.com>
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#ifndef MODBUS_TCP_H
++#define MODBUS_TCP_H
++
++#include "modbus.h"
++
++MODBUS_BEGIN_DECLS
++
++#if defined(_WIN32) && !defined(__CYGWIN__)
++/* Win32 with MinGW, supplement to <errno.h> */
++#include <winsock2.h>
++#if !defined(ECONNRESET)
++#define ECONNRESET WSAECONNRESET
++#endif
++#if !defined(ECONNREFUSED)
++#define ECONNREFUSED WSAECONNREFUSED
++#endif
++#if !defined(ETIMEDOUT)
++#define ETIMEDOUT WSAETIMEDOUT
++#endif
++#if !defined(ENOPROTOOPT)
++#define ENOPROTOOPT WSAENOPROTOOPT
++#endif
++#if !defined(EINPROGRESS)
++#define EINPROGRESS WSAEINPROGRESS
++#endif
++#endif
++
++#define MODBUS_TCP_DEFAULT_PORT 502
++#define MODBUS_TCP_SLAVE        0xFF
++
++/* Modbus_Application_Protocol_V1_1b.pdf Chapter 4 Section 1 Page 5
++ * TCP MODBUS ADU = 253 bytes + MBAP (7 bytes) = 260 bytes
++ */
++#define MODBUS_TCP_MAX_ADU_LENGTH 260
++
++MODBUS_API modbus_t *modbus_new_tcp(const char *ip_address, int port);
++MODBUS_API int modbus_tcp_listen(modbus_t *ctx, int nb_connection);
++MODBUS_API int modbus_tcp_accept(modbus_t *ctx, int *s);
++
++MODBUS_API modbus_t *modbus_new_tcp_pi(const char *node, const char *service);
++MODBUS_API int modbus_tcp_pi_listen(modbus_t *ctx, int nb_connection);
++MODBUS_API int modbus_tcp_pi_accept(modbus_t *ctx, int *s);
++
++MODBUS_END_DECLS
++
++#endif /* MODBUS_TCP_H */
+diff -druN a/include/modbus/modbus-version.h b/include/modbus/modbus-version.h
+--- a/include/modbus/modbus-version.h	1970-01-01 00:00:00.000000000 +0000
++++ b/include/modbus/modbus-version.h	2022-12-07 18:34:54.178352467 +0000
+@@ -0,0 +1,51 @@
++/*
++ * Copyright © Stéphane Raimbault <stephane.raimbault@gmail.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#ifndef MODBUS_VERSION_H
++#define MODBUS_VERSION_H
++
++/* The major version, (1, if %LIBMODBUS_VERSION is 1.2.3) */
++#define LIBMODBUS_VERSION_MAJOR (3)
++
++/* The minor version (2, if %LIBMODBUS_VERSION is 1.2.3) */
++#define LIBMODBUS_VERSION_MINOR (1)
++
++/* The micro version (3, if %LIBMODBUS_VERSION is 1.2.3) */
++#define LIBMODBUS_VERSION_MICRO (10)
++
++/* The full version, like 1.2.3 */
++#define LIBMODBUS_VERSION 3.1.10
++
++/* The full version, in string form (suited for string concatenation)
++ */
++#define LIBMODBUS_VERSION_STRING "3.1.10"
++
++/* Numerically encoded version, eg. v1.2.3 is 0x010203 */
++#define LIBMODBUS_VERSION_HEX                                                                      \
++    ((LIBMODBUS_VERSION_MAJOR << 16) | (LIBMODBUS_VERSION_MINOR << 8) |                            \
++     (LIBMODBUS_VERSION_MICRO << 0))
++
++/* Evaluates to True if the version is greater than @major, @minor and @micro
++ */
++#define LIBMODBUS_VERSION_CHECK(major, minor, micro)                                               \
++    (LIBMODBUS_VERSION_MAJOR > (major) ||                                                          \
++     (LIBMODBUS_VERSION_MAJOR == (major) && LIBMODBUS_VERSION_MINOR > (minor)) ||                  \
++     (LIBMODBUS_VERSION_MAJOR == (major) && LIBMODBUS_VERSION_MINOR == (minor) &&                  \
++      LIBMODBUS_VERSION_MICRO >= (micro)))
++
++#endif /* MODBUS_VERSION_H */
+diff -druN a/include/modbus/modbus.h b/include/modbus/modbus.h
+--- a/include/modbus/modbus.h	1970-01-01 00:00:00.000000000 +0000
++++ b/include/modbus/modbus.h	2022-10-18 01:16:13.366399645 +0000
+@@ -0,0 +1,329 @@
++/*
++ * Copyright © Stéphane Raimbault <stephane.raimbault@gmail.com>
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#ifndef MODBUS_H
++#define MODBUS_H
++
++// clang-format off
++/* Add this for macros that defined unix flavor */
++#if (defined(__unix__) || defined(unix)) && !defined(USG)
++# include <sys/param.h>
++#endif
++
++#ifndef _MSC_VER
++# include <stdint.h>
++#else
++# include "stdint.h"
++#endif
++
++#include "modbus-version.h"
++
++#if defined(_MSC_VER)
++# if defined(DLLBUILD)
++/* define DLLBUILD when building the DLL */
++#  define MODBUS_API __declspec(dllexport)
++# else
++#  define MODBUS_API __declspec(dllimport)
++# endif
++#else
++# define MODBUS_API
++#endif
++
++#ifdef  __cplusplus
++# define MODBUS_BEGIN_DECLS  extern "C" {
++# define MODBUS_END_DECLS    }
++#else
++# define MODBUS_BEGIN_DECLS
++# define MODBUS_END_DECLS
++#endif
++// clang-format on
++
++MODBUS_BEGIN_DECLS
++
++#ifndef FALSE
++#define FALSE 0
++#endif
++
++#ifndef TRUE
++#define TRUE 1
++#endif
++
++#ifndef OFF
++#define OFF 0
++#endif
++
++#ifndef ON
++#define ON 1
++#endif
++
++/* Modbus function codes */
++#define MODBUS_FC_READ_COILS               0x01
++#define MODBUS_FC_READ_DISCRETE_INPUTS     0x02
++#define MODBUS_FC_READ_HOLDING_REGISTERS   0x03
++#define MODBUS_FC_READ_INPUT_REGISTERS     0x04
++#define MODBUS_FC_WRITE_SINGLE_COIL        0x05
++#define MODBUS_FC_WRITE_SINGLE_REGISTER    0x06
++#define MODBUS_FC_READ_EXCEPTION_STATUS    0x07
++#define MODBUS_FC_WRITE_MULTIPLE_COILS     0x0F
++#define MODBUS_FC_WRITE_MULTIPLE_REGISTERS 0x10
++#define MODBUS_FC_REPORT_SLAVE_ID          0x11
++#define MODBUS_FC_MASK_WRITE_REGISTER      0x16
++#define MODBUS_FC_WRITE_AND_READ_REGISTERS 0x17
++
++#define MODBUS_BROADCAST_ADDRESS 0
++
++/* Modbus_Application_Protocol_V1_1b.pdf (chapter 6 section 1 page 12)
++ * Quantity of Coils to read (2 bytes): 1 to 2000 (0x7D0)
++ * (chapter 6 section 11 page 29)
++ * Quantity of Coils to write (2 bytes): 1 to 1968 (0x7B0)
++ */
++#define MODBUS_MAX_READ_BITS  2000
++#define MODBUS_MAX_WRITE_BITS 1968
++
++/* Modbus_Application_Protocol_V1_1b.pdf (chapter 6 section 3 page 15)
++ * Quantity of Registers to read (2 bytes): 1 to 125 (0x7D)
++ * (chapter 6 section 12 page 31)
++ * Quantity of Registers to write (2 bytes) 1 to 123 (0x7B)
++ * (chapter 6 section 17 page 38)
++ * Quantity of Registers to write in R/W registers (2 bytes) 1 to 121 (0x79)
++ */
++#define MODBUS_MAX_READ_REGISTERS     125
++#define MODBUS_MAX_WRITE_REGISTERS    123
++#define MODBUS_MAX_WR_WRITE_REGISTERS 121
++#define MODBUS_MAX_WR_READ_REGISTERS  125
++
++/* The size of the MODBUS PDU is limited by the size constraint inherited from
++ * the first MODBUS implementation on Serial Line network (max. RS485 ADU = 256
++ * bytes). Therefore, MODBUS PDU for serial line communication = 256 - Server
++ * address (1 byte) - CRC (2 bytes) = 253 bytes.
++ */
++#define MODBUS_MAX_PDU_LENGTH 253
++
++/* Consequently:
++ * - RTU MODBUS ADU = 253 bytes + Server address (1 byte) + CRC (2 bytes) = 256
++ *   bytes.
++ * - TCP MODBUS ADU = 253 bytes + MBAP (7 bytes) = 260 bytes.
++ * so the maximum of both backend in 260 bytes. This size can used to allocate
++ * an array of bytes to store responses and it will be compatible with the two
++ * backends.
++ */
++#define MODBUS_MAX_ADU_LENGTH 260
++
++/* Random number to avoid errno conflicts */
++#define MODBUS_ENOBASE 112345678
++
++/* Protocol exceptions */
++enum {
++    MODBUS_EXCEPTION_ILLEGAL_FUNCTION = 0x01,
++    MODBUS_EXCEPTION_ILLEGAL_DATA_ADDRESS,
++    MODBUS_EXCEPTION_ILLEGAL_DATA_VALUE,
++    MODBUS_EXCEPTION_SLAVE_OR_SERVER_FAILURE,
++    MODBUS_EXCEPTION_ACKNOWLEDGE,
++    MODBUS_EXCEPTION_SLAVE_OR_SERVER_BUSY,
++    MODBUS_EXCEPTION_NEGATIVE_ACKNOWLEDGE,
++    MODBUS_EXCEPTION_MEMORY_PARITY,
++    MODBUS_EXCEPTION_NOT_DEFINED,
++    MODBUS_EXCEPTION_GATEWAY_PATH,
++    MODBUS_EXCEPTION_GATEWAY_TARGET,
++    MODBUS_EXCEPTION_MAX
++};
++
++#define EMBXILFUN  (MODBUS_ENOBASE + MODBUS_EXCEPTION_ILLEGAL_FUNCTION)
++#define EMBXILADD  (MODBUS_ENOBASE + MODBUS_EXCEPTION_ILLEGAL_DATA_ADDRESS)
++#define EMBXILVAL  (MODBUS_ENOBASE + MODBUS_EXCEPTION_ILLEGAL_DATA_VALUE)
++#define EMBXSFAIL  (MODBUS_ENOBASE + MODBUS_EXCEPTION_SLAVE_OR_SERVER_FAILURE)
++#define EMBXACK    (MODBUS_ENOBASE + MODBUS_EXCEPTION_ACKNOWLEDGE)
++#define EMBXSBUSY  (MODBUS_ENOBASE + MODBUS_EXCEPTION_SLAVE_OR_SERVER_BUSY)
++#define EMBXNACK   (MODBUS_ENOBASE + MODBUS_EXCEPTION_NEGATIVE_ACKNOWLEDGE)
++#define EMBXMEMPAR (MODBUS_ENOBASE + MODBUS_EXCEPTION_MEMORY_PARITY)
++#define EMBXGPATH  (MODBUS_ENOBASE + MODBUS_EXCEPTION_GATEWAY_PATH)
++#define EMBXGTAR   (MODBUS_ENOBASE + MODBUS_EXCEPTION_GATEWAY_TARGET)
++
++/* Native libmodbus error codes */
++#define EMBBADCRC   (EMBXGTAR + 1)
++#define EMBBADDATA  (EMBXGTAR + 2)
++#define EMBBADEXC   (EMBXGTAR + 3)
++#define EMBUNKEXC   (EMBXGTAR + 4)
++#define EMBMDATA    (EMBXGTAR + 5)
++#define EMBBADSLAVE (EMBXGTAR + 6)
++
++extern const unsigned int libmodbus_version_major;
++extern const unsigned int libmodbus_version_minor;
++extern const unsigned int libmodbus_version_micro;
++
++typedef struct _modbus modbus_t;
++
++typedef struct _modbus_mapping_t {
++    int nb_bits;
++    int start_bits;
++    int nb_input_bits;
++    int start_input_bits;
++    int nb_input_registers;
++    int start_input_registers;
++    int nb_registers;
++    int start_registers;
++    uint8_t *tab_bits;
++    uint8_t *tab_input_bits;
++    uint16_t *tab_input_registers;
++    uint16_t *tab_registers;
++} modbus_mapping_t;
++
++typedef enum {
++    MODBUS_ERROR_RECOVERY_NONE = 0,
++    MODBUS_ERROR_RECOVERY_LINK = (1 << 1),
++    MODBUS_ERROR_RECOVERY_PROTOCOL = (1 << 2)
++} modbus_error_recovery_mode;
++
++typedef enum {
++    MODBUS_QUIRK_NONE = 0,
++    MODBUS_QUIRK_MAX_SLAVE = (1 << 1),
++    MODBUS_QUIRK_REPLY_TO_BROADCAST = (1 << 2),
++    MODBUS_QUIRK_ALL = 0xFF
++} modbus_quirks;
++
++MODBUS_API int modbus_set_slave(modbus_t *ctx, int slave);
++MODBUS_API int modbus_get_slave(modbus_t *ctx);
++MODBUS_API int modbus_set_error_recovery(modbus_t *ctx,
++                                         modbus_error_recovery_mode error_recovery);
++MODBUS_API int modbus_set_socket(modbus_t *ctx, int s);
++MODBUS_API int modbus_get_socket(modbus_t *ctx);
++
++MODBUS_API int
++modbus_get_response_timeout(modbus_t *ctx, uint32_t *to_sec, uint32_t *to_usec);
++MODBUS_API int
++modbus_set_response_timeout(modbus_t *ctx, uint32_t to_sec, uint32_t to_usec);
++
++MODBUS_API int
++modbus_get_byte_timeout(modbus_t *ctx, uint32_t *to_sec, uint32_t *to_usec);
++MODBUS_API int modbus_set_byte_timeout(modbus_t *ctx, uint32_t to_sec, uint32_t to_usec);
++
++MODBUS_API int
++modbus_get_indication_timeout(modbus_t *ctx, uint32_t *to_sec, uint32_t *to_usec);
++MODBUS_API int
++modbus_set_indication_timeout(modbus_t *ctx, uint32_t to_sec, uint32_t to_usec);
++
++MODBUS_API int modbus_get_header_length(modbus_t *ctx);
++
++MODBUS_API int modbus_connect(modbus_t *ctx);
++MODBUS_API void modbus_close(modbus_t *ctx);
++
++MODBUS_API void modbus_free(modbus_t *ctx);
++
++MODBUS_API int modbus_flush(modbus_t *ctx);
++MODBUS_API int modbus_set_debug(modbus_t *ctx, int flag);
++
++MODBUS_API const char *modbus_strerror(int errnum);
++
++MODBUS_API int modbus_read_bits(modbus_t *ctx, int addr, int nb, uint8_t *dest);
++MODBUS_API int modbus_read_input_bits(modbus_t *ctx, int addr, int nb, uint8_t *dest);
++MODBUS_API int modbus_read_registers(modbus_t *ctx, int addr, int nb, uint16_t *dest);
++MODBUS_API int
++modbus_read_input_registers(modbus_t *ctx, int addr, int nb, uint16_t *dest);
++MODBUS_API int modbus_write_bit(modbus_t *ctx, int coil_addr, int status);
++MODBUS_API int modbus_write_register(modbus_t *ctx, int reg_addr, const uint16_t value);
++MODBUS_API int modbus_write_bits(modbus_t *ctx, int addr, int nb, const uint8_t *data);
++MODBUS_API int
++modbus_write_registers(modbus_t *ctx, int addr, int nb, const uint16_t *data);
++MODBUS_API int
++modbus_mask_write_register(modbus_t *ctx, int addr, uint16_t and_mask, uint16_t or_mask);
++MODBUS_API int modbus_write_and_read_registers(modbus_t *ctx,
++                                               int write_addr,
++                                               int write_nb,
++                                               const uint16_t *src,
++                                               int read_addr,
++                                               int read_nb,
++                                               uint16_t *dest);
++MODBUS_API int modbus_report_slave_id(modbus_t *ctx, int max_dest, uint8_t *dest);
++
++MODBUS_API modbus_mapping_t *
++modbus_mapping_new_start_address(unsigned int start_bits,
++                                 unsigned int nb_bits,
++                                 unsigned int start_input_bits,
++                                 unsigned int nb_input_bits,
++                                 unsigned int start_registers,
++                                 unsigned int nb_registers,
++                                 unsigned int start_input_registers,
++                                 unsigned int nb_input_registers);
++
++MODBUS_API modbus_mapping_t *modbus_mapping_new(int nb_bits,
++                                                int nb_input_bits,
++                                                int nb_registers,
++                                                int nb_input_registers);
++MODBUS_API void modbus_mapping_free(modbus_mapping_t *mb_mapping);
++
++MODBUS_API int
++modbus_send_raw_request(modbus_t *ctx, const uint8_t *raw_req, int raw_req_length);
++
++MODBUS_API int modbus_receive(modbus_t *ctx, uint8_t *req);
++
++MODBUS_API int modbus_receive_confirmation(modbus_t *ctx, uint8_t *rsp);
++
++MODBUS_API int modbus_reply(modbus_t *ctx,
++                            const uint8_t *req,
++                            int req_length,
++                            modbus_mapping_t *mb_mapping);
++MODBUS_API int
++modbus_reply_exception(modbus_t *ctx, const uint8_t *req, unsigned int exception_code);
++MODBUS_API int modbus_enable_quirks(modbus_t *ctx, unsigned int quirks_mask);
++MODBUS_API int modbus_disable_quirks(modbus_t *ctx, unsigned int quirks_mask);
++
++/**
++ * UTILS FUNCTIONS
++ **/
++
++#define MODBUS_GET_HIGH_BYTE(data) (((data) >> 8) & 0xFF)
++#define MODBUS_GET_LOW_BYTE(data)  ((data) &0xFF)
++#define MODBUS_GET_INT64_FROM_INT16(tab_int16, index)                                \
++  (((int64_t) tab_int16[(index)] << 48) | ((int64_t) tab_int16[(index) + 1] << 32) | \
++   ((int64_t) tab_int16[(index) + 2] << 16) | (int64_t) tab_int16[(index) + 3])
++#define MODBUS_GET_INT32_FROM_INT16(tab_int16, index) \
++  (((int32_t) tab_int16[(index)] << 16) | (int32_t) tab_int16[(index) + 1])
++#define MODBUS_GET_INT16_FROM_INT8(tab_int8, index) \
++  (((int16_t) tab_int8[(index)] << 8) | (int16_t) tab_int8[(index) + 1])
++#define MODBUS_SET_INT16_TO_INT8(tab_int8, index, value)        \
++  do {                                                          \
++    ((int8_t *) (tab_int8))[(index)] = (int8_t) ((value) >> 8); \
++    ((int8_t *) (tab_int8))[(index) + 1] = (int8_t) (value);    \
++  } while (0)
++#define MODBUS_SET_INT32_TO_INT16(tab_int16, index, value)          \
++  do {                                                              \
++    ((int16_t *) (tab_int16))[(index)] = (int16_t) ((value) >> 16); \
++    ((int16_t *) (tab_int16))[(index) + 1] = (int16_t) (value);     \
++  } while (0)
++#define MODBUS_SET_INT64_TO_INT16(tab_int16, index, value)              \
++  do {                                                                  \
++    ((int16_t *) (tab_int16))[(index)] = (int16_t) ((value) >> 48);     \
++    ((int16_t *) (tab_int16))[(index) + 1] = (int16_t) ((value) >> 32); \
++    ((int16_t *) (tab_int16))[(index) + 2] = (int16_t) ((value) >> 16); \
++    ((int16_t *) (tab_int16))[(index) + 3] = (int16_t) (value);         \
++  } while (0)
++
++MODBUS_API void modbus_set_bits_from_byte(uint8_t *dest, int idx, const uint8_t value);
++MODBUS_API void modbus_set_bits_from_bytes(uint8_t *dest,
++                                           int idx,
++                                           unsigned int nb_bits,
++                                           const uint8_t *tab_byte);
++MODBUS_API uint8_t modbus_get_byte_from_bits(const uint8_t *src,
++                                             int idx,
++                                             unsigned int nb_bits);
++MODBUS_API float modbus_get_float(const uint16_t *src);
++MODBUS_API float modbus_get_float_abcd(const uint16_t *src);
++MODBUS_API float modbus_get_float_dcba(const uint16_t *src);
++MODBUS_API float modbus_get_float_badc(const uint16_t *src);
++MODBUS_API float modbus_get_float_cdab(const uint16_t *src);
++
++MODBUS_API void modbus_set_float(float f, uint16_t *dest);
++MODBUS_API void modbus_set_float_abcd(float f, uint16_t *dest);
++MODBUS_API void modbus_set_float_dcba(float f, uint16_t *dest);
++MODBUS_API void modbus_set_float_badc(float f, uint16_t *dest);
++MODBUS_API void modbus_set_float_cdab(float f, uint16_t *dest);
++
++#include "modbus-rtu.h"
++#include "modbus-tcp.h"
++
++MODBUS_END_DECLS
++
++#endif /* MODBUS_H */
+diff -druN a/src/config.h b/src/config.h
+--- a/src/config.h	1970-01-01 00:00:00.000000000 +0000
++++ b/src/config.h	2024-09-07 22:15:54.911841934 +0000
+@@ -0,0 +1,292 @@
++/* config.h.  Generated from config.h.in by configure.  */
++/* config.h.in.  Generated from configure.ac by autoheader.  */
++
++/* Define to 1 if you have the `accept4' function. */
++#define HAVE_ACCEPT4 1
++
++/* Define to 1 if you have the <arpa/inet.h> header file. */
++#define HAVE_ARPA_INET_H 1
++
++/* Define to 1 if you have the <byteswap.h> header file. */
++#define HAVE_BYTESWAP_H 1
++
++/* Define to 1 if you have the declaration of `TIOCM_RTS', and to 0 if you
++   don't. */
++#define HAVE_DECL_TIOCM_RTS 1
++
++/* Define to 1 if you have the declaration of `TIOCSRS485', and to 0 if you
++   don't. */
++#define HAVE_DECL_TIOCSRS485 1
++
++/* Define to 1 if you have the declaration of `__CYGWIN__', and to 0 if you
++   don't. */
++#define HAVE_DECL___CYGWIN__ 0
++
++/* Define to 1 if you have the <dlfcn.h> header file. */
++#define HAVE_DLFCN_H 1
++
++/* Define to 1 if you have the <errno.h> header file. */
++#define HAVE_ERRNO_H 1
++
++/* Define to 1 if you have the <fcntl.h> header file. */
++#define HAVE_FCNTL_H 1
++
++/* Define to 1 if you have the `getaddrinfo' function. */
++#define HAVE_GETADDRINFO 1
++
++/* Define to 1 if you have the `gettimeofday' function. */
++#define HAVE_GETTIMEOFDAY 1
++
++/* Define to 1 if you have the `inet_ntop' function. */
++#define HAVE_INET_NTOP 1
++
++/* Define to 1 if you have the `inet_pton' function. */
++#define HAVE_INET_PTON 1
++
++/* Define to 1 if you have the <inttypes.h> header file. */
++#define HAVE_INTTYPES_H 1
++
++/* Define to 1 if you have the <limits.h> header file. */
++#define HAVE_LIMITS_H 1
++
++/* Define to 1 if you have the <linux/serial.h> header file. */
++#define HAVE_LINUX_SERIAL_H 1
++
++/* Define to 1 if you have the <minix/config.h> header file. */
++/* #undef HAVE_MINIX_CONFIG_H */
++
++/* Define to 1 if you have the <netdb.h> header file. */
++#define HAVE_NETDB_H 1
++
++/* Define to 1 if you have the <netinet/in.h> header file. */
++#define HAVE_NETINET_IN_H 1
++
++/* Define to 1 if you have the <netinet/tcp.h> header file. */
++#define HAVE_NETINET_TCP_H 1
++
++/* Define to 1 if you have the `select' function. */
++#define HAVE_SELECT 1
++
++/* Define to 1 if you have the `socket' function. */
++#define HAVE_SOCKET 1
++
++/* Define to 1 if you have the <stdint.h> header file. */
++#define HAVE_STDINT_H 1
++
++/* Define to 1 if you have the <stdio.h> header file. */
++#define HAVE_STDIO_H 1
++
++/* Define to 1 if you have the <stdlib.h> header file. */
++#define HAVE_STDLIB_H 1
++
++/* Define to 1 if you have the `strerror' function. */
++#define HAVE_STRERROR 1
++
++/* Define to 1 if you have the <strings.h> header file. */
++#define HAVE_STRINGS_H 1
++
++/* Define to 1 if you have the <string.h> header file. */
++#define HAVE_STRING_H 1
++
++/* Define to 1 if you have the `strlcpy' function. */
++#define HAVE_STRLCPY 1
++
++/* Define to 1 if you have the <sys/ioctl.h> header file. */
++#define HAVE_SYS_IOCTL_H 1
++
++/* Define to 1 if you have the <sys/params.h> header file. */
++/* #undef HAVE_SYS_PARAMS_H */
++
++/* Define to 1 if you have the <sys/socket.h> header file. */
++#define HAVE_SYS_SOCKET_H 1
++
++/* Define to 1 if you have the <sys/stat.h> header file. */
++#define HAVE_SYS_STAT_H 1
++
++/* Define to 1 if you have the <sys/time.h> header file. */
++#define HAVE_SYS_TIME_H 1
++
++/* Define to 1 if you have the <sys/types.h> header file. */
++#define HAVE_SYS_TYPES_H 1
++
++/* Define to 1 if you have the <termios.h> header file. */
++#define HAVE_TERMIOS_H 1
++
++/* Define to 1 if you have the <time.h> header file. */
++#define HAVE_TIME_H 1
++
++/* Define to 1 if you have the <unistd.h> header file. */
++#define HAVE_UNISTD_H 1
++
++/* Define to 1 if you have the <wchar.h> header file. */
++#define HAVE_WCHAR_H 1
++
++/* Define to 1 if you have the <winsock2.h> header file. */
++/* #undef HAVE_WINSOCK2_H */
++
++/* Define to the sub-directory where libtool stores uninstalled libraries. */
++#define LT_OBJDIR ".libs/"
++
++/* Name of package */
++#define PACKAGE "libmodbus"
++
++/* Define to the address where bug reports for this package should be sent. */
++#define PACKAGE_BUGREPORT "https://github.com/stephane/libmodbus/issues"
++
++/* Define to the full name of this package. */
++#define PACKAGE_NAME "libmodbus"
++
++/* Define to the full name and version of this package. */
++#define PACKAGE_STRING "libmodbus 3.1.10"
++
++/* Define to the one symbol short name of this package. */
++#define PACKAGE_TARNAME "libmodbus"
++
++/* Define to the home page for this package. */
++#define PACKAGE_URL "http://libmodbus.org/"
++
++/* Define to the version of this package. */
++#define PACKAGE_VERSION "3.1.10"
++
++/* Define to 1 if all of the C90 standard headers exist (not just the ones
++   required in a freestanding environment). This macro is provided for
++   backward compatibility; new code need not use it. */
++#define STDC_HEADERS 1
++
++/* Enable extensions on AIX 3, Interix.  */
++#ifndef _ALL_SOURCE
++# define _ALL_SOURCE 1
++#endif
++/* Enable general extensions on macOS.  */
++#ifndef _DARWIN_C_SOURCE
++# define _DARWIN_C_SOURCE 1
++#endif
++/* Enable general extensions on Solaris.  */
++#ifndef __EXTENSIONS__
++# define __EXTENSIONS__ 1
++#endif
++/* Enable GNU extensions on systems that have them.  */
++#ifndef _GNU_SOURCE
++# define _GNU_SOURCE 1
++#endif
++/* Enable X/Open compliant socket functions that do not require linking
++   with -lxnet on HP-UX 11.11.  */
++#ifndef _HPUX_ALT_XOPEN_SOCKET_API
++# define _HPUX_ALT_XOPEN_SOCKET_API 1
++#endif
++/* Identify the host operating system as Minix.
++   This macro does not affect the system headers' behavior.
++   A future release of Autoconf may stop defining this macro.  */
++#ifndef _MINIX
++/* # undef _MINIX */
++#endif
++/* Enable general extensions on NetBSD.
++   Enable NetBSD compatibility extensions on Minix.  */
++#ifndef _NETBSD_SOURCE
++# define _NETBSD_SOURCE 1
++#endif
++/* Enable OpenBSD compatibility extensions on NetBSD.
++   Oddly enough, this does nothing on OpenBSD.  */
++#ifndef _OPENBSD_SOURCE
++# define _OPENBSD_SOURCE 1
++#endif
++/* Define to 1 if needed for POSIX-compatible behavior.  */
++#ifndef _POSIX_SOURCE
++/* # undef _POSIX_SOURCE */
++#endif
++/* Define to 2 if needed for POSIX-compatible behavior.  */
++#ifndef _POSIX_1_SOURCE
++/* # undef _POSIX_1_SOURCE */
++#endif
++/* Enable POSIX-compatible threading on Solaris.  */
++#ifndef _POSIX_PTHREAD_SEMANTICS
++# define _POSIX_PTHREAD_SEMANTICS 1
++#endif
++/* Enable extensions specified by ISO/IEC TS 18661-5:2014.  */
++#ifndef __STDC_WANT_IEC_60559_ATTRIBS_EXT__
++# define __STDC_WANT_IEC_60559_ATTRIBS_EXT__ 1
++#endif
++/* Enable extensions specified by ISO/IEC TS 18661-1:2014.  */
++#ifndef __STDC_WANT_IEC_60559_BFP_EXT__
++# define __STDC_WANT_IEC_60559_BFP_EXT__ 1
++#endif
++/* Enable extensions specified by ISO/IEC TS 18661-2:2015.  */
++#ifndef __STDC_WANT_IEC_60559_DFP_EXT__
++# define __STDC_WANT_IEC_60559_DFP_EXT__ 1
++#endif
++/* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
++#ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
++# define __STDC_WANT_IEC_60559_FUNCS_EXT__ 1
++#endif
++/* Enable extensions specified by ISO/IEC TS 18661-3:2015.  */
++#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
++# define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
++#endif
++/* Enable extensions specified by ISO/IEC TR 24731-2:2010.  */
++#ifndef __STDC_WANT_LIB_EXT2__
++# define __STDC_WANT_LIB_EXT2__ 1
++#endif
++/* Enable extensions specified by ISO/IEC 24747:2009.  */
++#ifndef __STDC_WANT_MATH_SPEC_FUNCS__
++# define __STDC_WANT_MATH_SPEC_FUNCS__ 1
++#endif
++/* Enable extensions on HP NonStop.  */
++#ifndef _TANDEM_SOURCE
++# define _TANDEM_SOURCE 1
++#endif
++/* Enable X/Open extensions.  Define to 500 only if necessary
++   to make mbstate_t available.  */
++#ifndef _XOPEN_SOURCE
++/* # undef _XOPEN_SOURCE */
++#endif
++
++
++/* Version number of package */
++#define VERSION "3.1.10"
++
++/* _ */
++#define WINVER 0x0501
++
++/* Number of bits in a file offset, on hosts where this is settable. */
++/* #undef _FILE_OFFSET_BITS */
++
++/* Define for large files, on AIX-style hosts. */
++/* #undef _LARGE_FILES */
++
++/* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
++   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
++   #define below would cause a syntax error. */
++/* #undef _UINT32_T */
++
++/* Define for Solaris 2.5.1 so the uint8_t typedef from <sys/synch.h>,
++   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
++   #define below would cause a syntax error. */
++/* #undef _UINT8_T */
++
++/* Define to `__inline__' or `__inline' if that's what the C compiler
++   calls it, or to nothing if 'inline' is not supported under any name.  */
++#ifndef __cplusplus
++/* #undef inline */
++#endif
++
++/* Define to the type of a signed integer type of width exactly 64 bits if
++   such a type exists and the standard includes do not define it. */
++/* #undef int64_t */
++
++/* Define to `unsigned int' if <sys/types.h> does not define. */
++/* #undef size_t */
++
++/* Define to `int' if <sys/types.h> does not define. */
++/* #undef ssize_t */
++
++/* Define to the type of an unsigned integer type of width exactly 16 bits if
++   such a type exists and the standard includes do not define it. */
++/* #undef uint16_t */
++
++/* Define to the type of an unsigned integer type of width exactly 32 bits if
++   such a type exists and the standard includes do not define it. */
++/* #undef uint32_t */
++
++/* Define to the type of an unsigned integer type of width exactly 8 bits if
++   such a type exists and the standard includes do not define it. */
++/* #undef uint8_t */

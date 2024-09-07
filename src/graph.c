@@ -4,6 +4,8 @@
 #include "graph.h"
 
 #include <fcntl.h>
+#include <src/core/lv_obj_pos.h>
+#include <src/misc/lv_color.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -93,6 +95,7 @@ void graph_init(void)
 	disp_drv.dpi       = dpi;
 	disp_drv.rotated   = LV_DISP_ROT_270;
 	disp_drv.sw_rotate = 1;
+	lv_disp_drv_use_generic_set_px_cb(&disp_drv, LV_IMG_CF_TRUE_COLOR_ALPHA);
 	lv_disp_drv_register(&disp_drv);
 
 	scr_main = lv_scr_act();
@@ -195,7 +198,7 @@ void main_init(void)
 	if (conf_main_background != NULL)
 		lv_style_set_bg_img_src(&main_style, conf_main_background);
 	else
-		lv_style_set_bg_color(&main_style, lv_color_hex(0x03f0000));
+		lv_style_set_bg_color(&main_style, (lv_color_t)LV_COLOR_MAKE32(0x3f, 0, 0));
 	lv_obj_add_style(scr_main, &main_style, 0);
 
 	check_led = lv_obj_create(scr_main);
@@ -354,7 +357,7 @@ int main_thread(void *arg)
 	main_init();
 
 	for (;;) {
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 100000000 }, NULL);
+		thrd_sleep(&timespec_ms(100), NULL);
 
 		if (!atomic_exchange(&main_update, false))
 			continue;
@@ -412,7 +415,10 @@ int scr_saver_thread(void *arg)
 	if (conf_scr_saver_item != NULL)
 		lv_img_set_src(img_dvd, conf_scr_saver_item);
 	// else
-	//	lv_img_set_src(img_dvd, &DVD_VIDEO_LOGO);
+	// 	lv_img_set_src(img_dvd, &DVD_VIDEO_LOGO);
+
+	uint32_t img_dvd_width  = lv_obj_get_width(img_dvd);
+	uint32_t img_dvd_height = lv_obj_get_height(img_dvd);
 
 	lv_obj_add_style(img_dvd, &img_style, 0);
 
@@ -433,17 +439,17 @@ int scr_saver_thread(void *arg)
 	bool    dir_changed = false;
 
 	for (uint32_t t = 0;; t++) {
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 5000000 }, NULL);
+		thrd_sleep(&timespec_ms(5), NULL);
 
 		if (!atomic_load(&scr_saver_running)) {
-			thrd_sleep(&(struct timespec) { .tv_sec = 1 }, NULL);
+			thrd_sleep(&timespec_s(1), NULL);
 			continue;
 		}
 
 		if (t % 6)
 			continue;
 
-		if (pos_x >= (int32_t)(width - DVD_VIDEO_LOGO.header.w)) {
+		if (pos_x >= (int32_t)(width - img_dvd_width)) {
 			dir_x       = -3;
 			dir_changed = true;
 		} else if (pos_x <= 0) {
@@ -452,7 +458,7 @@ int scr_saver_thread(void *arg)
 		}
 		pos_x += dir_x;
 
-		if (pos_y >= (int32_t)(height - DVD_VIDEO_LOGO.header.h)) {
+		if (pos_y >= (int32_t)(height - img_dvd_height)) {
 			dir_y       = -3;
 			dir_changed = true;
 		} else if (pos_y <= 0) {
@@ -486,7 +492,7 @@ int task_thread(void *arg)
 		lv_task_handler();
 		mtx_unlock(&task_mtx);
 
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 5000000 }, NULL);
+		thrd_sleep(&timespec_ms(5), NULL);
 	}
 }
 
@@ -496,7 +502,7 @@ int timer_thread(void *arg)
 
 	for (;;) {
 		lv_tick_inc(5);
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 5000000 }, NULL);
+		thrd_sleep(&timespec_ms(5), NULL);
 	}
 }
 
@@ -518,7 +524,6 @@ void translate_digits(int point, bool diff, lv_obj_t *(d[]))
 		} else if (positive) {
 			lv_img_set_src(d[6], nums[11]);
 			lv_obj_clear_flag(d[6], LV_OBJ_FLAG_HIDDEN);
-
 		} else {
 			lv_obj_add_flag(d[6], LV_OBJ_FLAG_HIDDEN);
 		}

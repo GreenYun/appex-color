@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "gpio.h"
 
 void (*click_callback[3])(void);
 uint8_t click_callback_count = 0;
@@ -52,6 +53,9 @@ void clear_btn_long_press_callback(void)
 void btn_init(void)
 {
 	static bool thrd_started = false;
+
+	gpio_export(196);
+	gpio_set_dir(196, "in");
 
 	if (!thrd_started) {
 		thrd_t btn_thread_id;
@@ -97,7 +101,7 @@ int btn_thread(void *args)
 			long_pressed = false;
 		}
 
-		thrd_sleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 1000000 }, NULL);
+		thrd_sleep(&timespec_ms(1), NULL);
 	}
 }
 
@@ -105,6 +109,6 @@ void call(void (*callback[])(void), int count)
 {
 	for (int i = 0; i < count; i++) {
 		callback[i]();
-		nanosleep(&(struct timespec) { .tv_sec = 0, .tv_nsec = 2500000 }, NULL);
+		nanosleep(&timespec_us(2500), NULL);
 	}
 }
