@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: curl -sSfL "$URL_TOOLCHAIN" | tar -xJ
+      env:
+        URL_TOOLCHAIN: https://archive.openwrt.org/releases/18.06.4/targets/sunxi/cortexa8/openwrt-sdk-18.06.4-sunxi-cortexa8_gcc-7.3.0_musl_eabi.Linux-x86_64.tar.xz
+    - uses: seanmiddleditch/gha-setup-ninja@master
+      with:
+        version: 1.12.1
+    - run: echo "STAGING_DIR=${GITHUB_WORKSPACE}/openwrt-sdk-18.06.4-sunxi-cortexa8_gcc-7.3.0_musl_eabi.Linux-x86_64/staging_dir" >> "$GITHUB_ENV"
+    - uses: threeal/cmake-action@v2.0.0
+      with:
+        generator: Ninja
+        options: |
+          CMAKE_BUILD_TYPE=Release
+          CMAKE_TOOLCHAIN_FILE=toolchain.cmake
+    - uses: actions/upload-artifact@v4
+      with:
+        name: app
+        path: build/app
