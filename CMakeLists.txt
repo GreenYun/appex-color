@@ -1,3 +1,6 @@
+# Copyright (c) 2023-2024 GreenYun Organization
+# SPDX-License-Identifier: MIT
+
 cmake_minimum_required(VERSION 3.24)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0177 NEW)

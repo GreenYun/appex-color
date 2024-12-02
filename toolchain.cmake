@@ -1,3 +1,6 @@
+# Copyright (c) 2023-2024 GreenYun Organization
+# SPDX-License-Identifier: MIT
+
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR ARM)
 
