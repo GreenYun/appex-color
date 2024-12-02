@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.24)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-include(FetchContent)
+set(CMAKE_POLICY_DEFAULT_CMP0177 NEW)
 
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR ARM)
@@ -52,10 +52,16 @@ target_link_options(app PRIVATE
     $<$<BOOL:${C_LINKER_HAS_AS_NEEDED}>:LINKER:--as-needed>
 )
 
+include(FetchContent)
+
 set(LV_CONF_INCLUDE_SIMPLE)
 FetchContent_Declare(lvgl
     GIT_REPOSITORY https://github.com/lvgl/lvgl.git
-    GIT_TAG release/v8.3)
+    GIT_TAG release/v8.4
+    PATCH_COMMAND patch -s -R -t -p1 -i ${CMAKE_SOURCE_DIR}/cmake/lvgl_png_color.patch &&
+                  patch -s -N -f -p1 -i ${CMAKE_SOURCE_DIR}/cmake/lvgl_png_color.patch || true &&
+                  patch -s -R -t -p1 -i ${CMAKE_SOURCE_DIR}/cmake/lvgl_png_color.patch &&
+                  patch -s -N -f -p1 -i ${CMAKE_SOURCE_DIR}/cmake/lvgl_png_color.patch )
 FetchContent_MakeAvailable(lvgl)
 
 FetchContent_Declare(lv_drivers
@@ -76,15 +82,15 @@ FetchContent_Declare(iniparser
     GIT_TAG main)
 FetchContent_MakeAvailable(iniparser)
 
-# https://github.com/stephane/libmodbus/releases/download/v3.1.10/libmodbus-3.1.10.tar.gz
-
 FetchContent_Declare(modbus
-    URL https://github.com/stephane/libmodbus/releases/download/v3.1.10/libmodbus-3.1.10.tar.gz
-    URL_HASH SHA384=a558a06de7410677b63b2b69792f371dbc029070d6b8d992c3340e875cc0b07f57859fe9ed9a87c419351a3ddcd67aee
+    GIT_REPOSITORY https://github.com/stephane/libmodbus.git
+    GIT_TAG v3.1.11
     DOWNLOAD_EXTRACT_TIMESTAMP FALSE
     OVERRIDE_FIND_PACKAGE
-    PATCH_COMMAND patch -s -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/cmake/libmodbus.patch
+    PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/cmake/modbus/CMakeLists.txt CMakeLists.txt &&
+                  ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/cmake/modbus/modbus-version.h.in src/modbus-version.h.in &&
+                  ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/cmake/modbus/config.h.in config.h.in
 )
 FetchContent_MakeAvailable(modbus)
 
-target_link_libraries(app PRIVATE lvgl::lvgl lvgl::drivers iniparser-static modbus)
+target_link_libraries(app PRIVATE lvgl::lvgl lvgl::drivers iniparser-static modbus -static)

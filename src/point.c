@@ -78,10 +78,6 @@ void point_init(void)
 	nanosleep(&timespec_ms(500), NULL);
 	gpio_write(37, 1);
 
-	gpio_write(38, 0);
-	nanosleep(&timespec_ms(500), NULL);
-	gpio_write(38, 1);
-
 	for (int i = 0; i < 5; i++) {
 		if (gpio_read(38) == 0)
 			break;

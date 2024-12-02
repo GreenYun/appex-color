@@ -20,8 +20,8 @@ int main(void)
 	add_btn_long_press_callback(point_reinit);
 	add_pt_chg_callback(graph_toggle_update);
 
-	graph_init();
 	point_init();
+	graph_init();
 
 	for (;;)
 		nanosleep(&timespec_s(INT_MAX), NULL);

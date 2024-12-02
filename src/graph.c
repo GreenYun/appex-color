@@ -4,8 +4,7 @@
 #include "graph.h"
 
 #include <fcntl.h>
-#include <src/core/lv_obj_pos.h>
-#include <src/misc/lv_color.h>
+#include <limits.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -95,7 +94,6 @@ void graph_init(void)
 	disp_drv.dpi       = dpi;
 	disp_drv.rotated   = LV_DISP_ROT_270;
 	disp_drv.sw_rotate = 1;
-	lv_disp_drv_use_generic_set_px_cb(&disp_drv, LV_IMG_CF_TRUE_COLOR_ALPHA);
 	lv_disp_drv_register(&disp_drv);
 
 	scr_main = lv_scr_act();
@@ -296,7 +294,7 @@ void main_show_points(void)
 		lv_obj_clear_flag(digits[i][7], LV_OBJ_FLAG_HIDDEN);
 
 		translate_digits(points.points[i], false, digits[i]);
-		lv_style_set_img_recolor(digit_style + i, lv_color_hex(0xfdfdfd));
+		lv_style_set_img_recolor(digit_style + i, lv_color_hex(conf_normal_color));
 	}
 
 	mtx_unlock(&task_mtx);
@@ -410,15 +408,22 @@ int scr_saver_thread(void *arg)
 	lv_style_set_img_recolor_opa(&img_style, LV_OPA_COVER);
 	lv_style_set_img_recolor(&img_style, lv_color_hex(palette[palette_index]));
 
-	// LV_IMG_DECLARE(DVD_VIDEO_LOGO);
+#ifdef APP_USE_DVD_VIDEO_LOGO
+	LV_IMG_DECLARE(DVD_VIDEO_LOGO);
+#endif
+
 	lv_obj_t *img_dvd = lv_img_create(scr_saver);
 	if (conf_scr_saver_item != NULL)
 		lv_img_set_src(img_dvd, conf_scr_saver_item);
-	// else
-	// 	lv_img_set_src(img_dvd, &DVD_VIDEO_LOGO);
+	else
+#ifdef APP_USE_DVD_VIDEO_LOGO
+		lv_img_set_src(img_dvd, &DVD_VIDEO_LOGO);
+#else
+		thrd_sleep(&timespec_s(INT_MAX), NULL);
+#endif
 
-	uint32_t img_dvd_width  = lv_obj_get_width(img_dvd);
-	uint32_t img_dvd_height = lv_obj_get_height(img_dvd);
+	uint32_t img_dvd_width  = ((lv_img_t *)img_dvd)->w;
+	uint32_t img_dvd_height = ((lv_img_t *)img_dvd)->h;
 
 	lv_obj_add_style(img_dvd, &img_style, 0);
 
